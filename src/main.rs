@@ -82,28 +82,44 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    #[command(about = "作者情報を表示します。")]
     Author,
+    #[command(alias = "pl", about = "現在オンラインのプレイヤー名を表示します。")]
     Players,
+    #[command(about = "現在のプレイヤー数を表示します。")]
     Pq,
+    #[command(about = "現在のプレイヤー数とオンラインのプレイヤー名を表示します。")]
     Pall,
+    #[command(alias = "isonline", about = "サーバーがオンラインかどうかを確認します。")]
     IsOnline,
+    #[command(alias = "isoffline", about = "サーバーがオフラインかどうかを確認します。")]
     IsOffline,
+    #[command(about = "Haoleのバージョンを表示します。")]
     Version,
+    #[command(alias = "sver", about = "サーバーのバージョンを取得します。")]
     ServerVersion,
+    #[command(about = "サーバーのIPアドレスを取得します。")]
     Ip,
+    #[command(about = "サーバーのホスト名を取得します。")]
     Host,
+    #[command(alias = "proto", about = "サーバーのプロトコルバージョンを取得します。")]
     Protocol,
+    #[command(about = "サーバーのポート番号を取得します。")]
     Port,
+    #[command(about = "サーバーのMOTDを取得します。")]
     Motd {
         #[arg(short, long)]
         raw: Option<String>,
         clean: Option<String>,
         html: Option<String>,
     },
+    #[command(about = "Haoleの動作モードを設定または表示します。")]
     Mode {
         new_mode: Option<String>,
     },
+    #[command(about = "Haoleを最新バージョンにアップデートします。")]
     Update,
+    #[command(about = "サーバーにPingを送信します。")]
     Ping,
 }
 
@@ -298,8 +314,12 @@ async fn run_app(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
                     cfg.mode = m.to_string(); 
                     confy::store("haole", "config", &cfg)?;
                     println!("{} モードを {} に変更しました。", ">>".green(), cfg.mode.cyan());
+                } else if m == "toggle" {
+                    cfg.mode = if cfg.mode == "cli" { "tui".to_string() } else { "cli".to_string() };
+                    confy::store("haole", "config", &cfg)?;
+                    println!("{} モードを {} に変更しました。", ">>".green(), cfg.mode.cyan());
                 } else {
-                    println!("{} 無効なモードです。cli または tui を指定してください。", "!!".red());
+                    println!("{} 無効なモードです。cli または tui を指定してください。toggleで切り替えることもできます。", "!!".red());
                 }
             } else {
                 println!("現在のモード: {}", cfg.mode.cyan());
