@@ -1,6 +1,6 @@
 [package]
 name = "Haole"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2021"
 repository = "https://github.com/KoHaRxnP/haole"
 
