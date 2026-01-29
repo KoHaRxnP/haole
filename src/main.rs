@@ -71,7 +71,7 @@ struct Players {
 }
 
 #[derive(Parser)]
-#[command(name = "haole", about = "HavenMC Status CLI Tool", version = env!("CARGO_PKG_VERSION"))]
+#[command(name = "haole", about = "HavenMC Status CLI/TUI Tool", version = env!("CARGO_PKG_VERSION"))]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -108,13 +108,13 @@ enum Commands {
 }
 
 async fn fetch_haven_status() -> Result<HavenStatus, Box<dyn std::error::Error>> {
-    let url = "https://api.havenmc.jp/status";
+    let url: &str = "https://api.havenmc.jp/status";
     let resp: HavenStatus = reqwest::get(url).await?.json().await?;
     Ok(resp)
 }
 
 async fn fetch_haven_status_by_mcstatusio() -> Result<McStatusIOResponse, Box<dyn std::error::Error>> {
-    let url = "https://api.mcstatus.io/v2/status/java/play.havenmc.jp";
+    let url: &str = "https://api.mcstatus.io/v2/status/java/play.havenmc.jp";
     let resp: McStatusIOResponse = reqwest::get(url).await?.json().await?;
     Ok(resp)
 }
@@ -128,21 +128,29 @@ fn under_dev() {
 }
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let default_panic: Box<dyn Fn(&std::panic::PanicHookInfo<'_>) + Send + Sync> = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = crossterm::terminal::disable_raw_mode();
+        let _ = execute!(std::io::stdout(), crossterm::terminal::LeaveAlternateScreen);
+        default_panic(info);
+    }));
+
     let args: Vec<String> = std::env::args().collect();
-    let cfg: HaoleConfig = confy::load("haole", "config").unwrap_or_default();
+    let cfg: HaoleConfig = confy::load("haole", "config").map_err(|e: confy::ConfyError| {
+        eprintln!("{} 設定ファイルの読み込みに失敗しました。デフォルト値を使用します: {}", "!!".yellow(), e);
+    }).unwrap_or_default();
     if cfg.mode == "tui" && args.len() == 1 {
         run_tui_loop().await?;
         return Ok(());
     }
         let cli: Cli = Cli::parse();
-        let interval_secs = match cli.watch {
-            Some(Some(sec)) => if sec < 2 { 2 } else { sec },
-            Some(None) => 5,
-            None => 0,
-        };
+        let interval_secs: u64 = cli.watch
+            .map(|inner: Option<u64>| inner.unwrap_or(5))
+            .map(|sec: u64| sec.max(2))
+            .unwrap_or(0);
 
         if interval_secs > 0 {
-            let mut stdout = stdout();
+            let mut stdout: std::io::Stdout = stdout();
             
             loop {
                 execute!(stdout, Clear(ClearType::All), MoveTo(0, 0))?;
@@ -171,15 +179,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn run_app(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
-    let st: HavenStatus = fetch_haven_status().await?;
-    let st_mcstatusio: McStatusIOResponse = fetch_haven_status_by_mcstatusio().await?;
-    let version: &str = env!("CARGO_PKG_VERSION");
-
     match &cli.command {
         Commands::Author => {
             println!("Created by: {}", "KoHaRxnP".magenta());
+            return Ok(());
         }
         Commands::Players => {
+            let st: HavenStatus = fetch_haven_status().await?;
             if let Some(list) = st.players.list {
                 if list.is_empty() {
                     println!("{}", "現在オンラインのプレイヤーはいません。".yellow());
@@ -191,12 +197,16 @@ async fn run_app(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 println!("{}", "プレイヤー名の取得が制限されているか、データがありません。".red());
             }
+            return Ok(());
         }
         Commands::Pq => {
+            let st: HavenStatus = fetch_haven_status().await?;
             println!("\n{} {}/{} プレイヤーがオンライン", 
                 "●".green(), st.players.online, st.players.max);
+            return Ok(());
         }
         Commands::Pall => {
+            let st: HavenStatus = fetch_haven_status().await?;
             if let Some(list) = st.players.list {
                 if list.is_empty() {
                     println!("{}", "現在オンラインのプレイヤーはいません。".yellow());
@@ -210,48 +220,66 @@ async fn run_app(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
             }
             println!("\n{} {}/{} プレイヤーがオンライン", 
                 "●".green(), st.players.online, st.players.max);
+            return Ok(());
         }
         Commands::IsOnline => {
+            let st: HavenStatus = fetch_haven_status().await?;
             if st.online == true {
                 println!("{}", "サーバーはオンラインです。".green());
             } else {
                 println!("{}", " サーバーはオフラインです。".red());
             }
+            return Ok(());
         }
         Commands::IsOffline => {
+            let st: HavenStatus = fetch_haven_status().await?;
             if st.online == false {
                 println!("{}", "サーバーはオフラインです。".green());
             } else {
                 println!("{}", "サーバーはオンラインです。".red());
             }
+            return Ok(());
         }
         Commands::Version => {
-            let logo = r#"
+            let logo: &str = r#"
             _                _      
             | |__   __ _  ___| | ___ 
             | '_ \ / _` |/   \ |/ _ \
             | | | | (_| |  | | |  __/
             |_| |_|\__,_|\___|_|\___|
                 "#;
+            let version: &str = env!("CARGO_PKG_VERSION");
             println!("{}", logo.green().bold());
             println!("Haole Version: {}", version.magenta());
+            return Ok(());
         }
         Commands::ServerVersion => {
+            let st: HavenStatus = fetch_haven_status().await?;
             println!("Server Version: {}", st.version.magenta());
+            return Ok(());
         }
         Commands::Ip => {
+            let st_mcstatusio: McStatusIOResponse = fetch_haven_status_by_mcstatusio().await?;
             println!("Server IP: {}", st_mcstatusio.ip_address.magenta());
+            return Ok(());
         }
         Commands::Host => {
+            let st_mcstatusio: McStatusIOResponse = fetch_haven_status_by_mcstatusio().await?;
             println!("Server Host: {}", st_mcstatusio.host.magenta());
+            return Ok(());
         }
         Commands::Protocol => {
+            let st_mcstatusio: McStatusIOResponse = fetch_haven_status_by_mcstatusio().await?;
             println!("Protocol Version: {}", st_mcstatusio.version.protocol.to_string().magenta());
+            return Ok(());
         }
         Commands::Port => {
+            let st_mcstatusio: McStatusIOResponse = fetch_haven_status_by_mcstatusio().await?;
             println!("Server Port: {}", st_mcstatusio.port.to_string().magenta());
+            return Ok(());
         }
         Commands::Motd { raw, clean, html } => {
+            let st_mcstatusio: McStatusIOResponse = fetch_haven_status_by_mcstatusio().await?;
             if let Some(_query) = raw {
                 println!("MOTD (Raw): {}", st_mcstatusio.motd.raw.magenta());
             } else if let Some(_query) = clean {
@@ -261,6 +289,7 @@ async fn run_app(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 println!("MOTD: {}", st_mcstatusio.motd.clean.magenta());
             }
+            return Ok(());
         }
         Commands::Mode { new_mode } => {
             let mut cfg: HaoleConfig = confy::load("haole", "config")?;
@@ -275,11 +304,12 @@ async fn run_app(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 println!("現在のモード: {}", cfg.mode.cyan());
             }
+            return Ok(());
         }
         Commands::Update => {
             println!("{} 最新バージョンを確認中...", ">>".blue());
 
-            let handle = tokio::task::spawn_blocking(|| {
+            let handle: tokio::task::JoinHandle<Result<self_update::Status, self_update::errors::Error>> = tokio::task::spawn_blocking(|| {
                 self_update::backends::github::Update::configure()
                     .repo_owner("KoHaRxnP")
                     .repo_name("haole")
@@ -300,35 +330,40 @@ async fn run_app(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
                 }
                 Err(e) => println!("{} アップデート中にエラーが発生しました: {}", "!!".red(), e),
             }
+            return Ok(());
         }
         Commands::Ping => {
             not_reccommended();
             under_dev();
             run_ping().await?;
+            return Ok(());
         }
     }
-    Ok(())
 }
 
 async fn run_tui_loop() -> Result<(), Box<dyn std::error::Error>> {
     crossterm::terminal::enable_raw_mode()?;
-    let mut stdout = std::io::stdout();
+    let mut stdout: std::io::Stdout = std::io::stdout();
     execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
 
-    let mut last_tick = std::time::Instant::now();
-    let tick_rate = Duration::from_secs(5);
+    let _ = crossterm::terminal::disable_raw_mode();
+    let _ = execute!(stdout, crossterm::terminal::LeaveAlternateScreen);
+    
+    let backend: CrosstermBackend<std::io::Stdout> = CrosstermBackend::new(stdout);
+    let mut terminal: Terminal<CrosstermBackend<std::io::Stdout>> = Terminal::new(backend)?;
 
-    let mut st = fetch_haven_status().await.ok();
+    let mut last_tick: std::time::Instant = std::time::Instant::now();
+    let tick_rate: Duration = Duration::from_secs(5);
+
+    let mut st: Option<HavenStatus> = fetch_haven_status().await.ok();
 
     let mut history: VecDeque<HistoryEntry> = VecDeque::with_capacity(50);
 
     loop {
-        terminal.draw(|f| {
-            let size = f.size();
+        terminal.draw(|f: &mut ratatui::Frame<'_>| {
+            let size: ratatui::prelude::Rect = f.size();
 
-            let chunks = Layout::default()
+            let chunks: std::rc::Rc<[ratatui::prelude::Rect]> = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
                     Constraint::Length(3),
@@ -336,7 +371,7 @@ async fn run_tui_loop() -> Result<(), Box<dyn std::error::Error>> {
                 ])
                 .split(size);
 
-            let main_layout = Layout::default()
+            let main_layout: std::rc::Rc<[ratatui::prelude::Rect]> = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([
                     Constraint::Percentage(30),
@@ -344,25 +379,26 @@ async fn run_tui_loop() -> Result<(), Box<dyn std::error::Error>> {
                 ])
                 .split(chunks[1]);
 
-            let status_text = if let Some(ref s) = st {
-                format!(" サーバー: {} | オンライン: {}/{}", 
+            let status_text: String = match &st {
+                Some(s) => {
+                    format!(" サーバー: {} | オンライン: {}/{}", 
                     if s.online { "ONLINE".green() } else { "OFFLINE".red() },
                     s.players.online, s.players.max)
-            } else {
-                "データを取得中...".into()
+                },
+                None => format!(" {} データを取得中、または接続エラー...", "!!".yellow())
             };
-            let status_bar = Paragraph::new(status_text)
+            let status_bar: Paragraph<'_> = Paragraph::new(status_text)
                 .block(Block::default().borders(Borders::ALL).title(" HavenMC Status "));
 
             let players_items: Vec<ListItem> = if let Some(ref s) = st {
-                s.players.list.as_ref().map_or(vec![], |list| {
-                    list.iter().map(|p| ListItem::new(format!("  • {}", p))).collect()
+                s.players.list.as_ref().map_or(vec![], |list: &Vec<String>| {
+                    list.iter().map(|p: &String| ListItem::new(format!("  • {}", p))).collect()
                 })
             } else { vec![] };
-            let players_list = List::new(players_items)
+            let players_list: List<'_> = List::new(players_items)
                 .block(Block::default().borders(Borders::ALL).title(" Players "));
 
-            let right_chunks = Layout::default()
+            let right_chunks: std::rc::Rc<[ratatui::prelude::Rect]> = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
                     Constraint::Length(3),
@@ -370,20 +406,20 @@ async fn run_tui_loop() -> Result<(), Box<dyn std::error::Error>> {
                 ])
                 .split(main_layout[1]);
 
-            let data: Vec<u64> = history.iter().map(|e| e.online as u64).collect();
+            let data: Vec<u64> = history.iter().map(|e: &HistoryEntry| e.online as u64).collect();
             
-            let cmax = data.iter().max().cloned().unwrap_or(0);
-            let max = if cmax < 10 { 10 } else { cmax + 5 };
-            let sparkline = ratatui::widgets::Sparkline::default()
+            let cmax: u64 = data.iter().max().cloned().unwrap_or(0);
+            let max: u64 = if cmax < 10 { 10 } else { cmax + 5 };
+            let sparkline: ratatui::widgets::Sparkline<'_> = ratatui::widgets::Sparkline::default()
                 .block(Block::default().borders(Borders::LEFT | Borders::RIGHT | Borders::TOP).title(" Activity "))
                 .data(&data)
                 .max(max)
                 .style(ratatui::style::Style::default().fg(ratatui::style::Color::Cyan));
 
             let history_content: Vec<ListItem> = history.iter().rev()
-                .map(|e| ListItem::new(format!(" [{}] {} players", e.time, e.online)))
+                .map(|e: &HistoryEntry| ListItem::new(format!(" [{}] {} players", e.time, e.online)))
                 .collect();
-            let history_list = List::new(history_content)
+            let history_list: List<'_> = List::new(history_content)
                 .block(Block::default().borders(Borders::LEFT | Borders::RIGHT | Borders::BOTTOM));
 
             f.render_widget(status_bar, chunks[0]);
@@ -392,7 +428,7 @@ async fn run_tui_loop() -> Result<(), Box<dyn std::error::Error>> {
             f.render_widget(history_list, right_chunks[1]);
         })?;
 
-        let timeout = tick_rate
+        let timeout: Duration = tick_rate
             .checked_sub(last_tick.elapsed())
             .unwrap_or(Duration::from_secs(0));
 
@@ -407,7 +443,6 @@ async fn run_tui_loop() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         if last_tick.elapsed() >= tick_rate {
-            if last_tick.elapsed() >= tick_rate {
             st = fetch_haven_status().await.ok();
 
             if let Some(ref s) = st {
@@ -421,7 +456,6 @@ async fn run_tui_loop() -> Result<(), Box<dyn std::error::Error>> {
             }
             last_tick = std::time::Instant::now();
         }
-        }
     }
 
     crossterm::terminal::disable_raw_mode()?;
@@ -432,17 +466,18 @@ async fn run_tui_loop() -> Result<(), Box<dyn std::error::Error>> {
 async fn run_ping() -> Result<(), Box<dyn std::error::Error>> {
     println!("{} play.havenmc.jp へ Ping を送信中...", ">>".blue());
 
-    let count_flag = if cfg!(windows) { "-n" } else { "-c" };
+    let count_flag: &str = if cfg!(windows) { "-n" } else { "-c" };
 
     let output = Command::new("ping")
         .args([count_flag, "4", "play.havenmc.jp"])
-        .output()?;
+        .output()
+        .map_err(|e| format!("外部コマンド 'ping' の実行に失敗しました。パスが通っているか確認してください: {}", e))?;
 
     if output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stdout: std::borrow::Cow<'_, str> = String::from_utf8_lossy(&output.stdout);
         println!("{}", stdout);
     } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr: std::borrow::Cow<'_, str> = String::from_utf8_lossy(&output.stderr);
         eprintln!("{} Pingに失敗しました: {}", "!!".red(), stderr);
     }
 
