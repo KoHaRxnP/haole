@@ -342,6 +342,8 @@ async fn run_app(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn run_tui_loop() -> Result<(), Box<dyn std::error::Error>> {
+    let mut stdout: std::io::Stdout = std::io::stdout();
+    execute!(stdout, Clear(ClearType::All), MoveTo(0, 0))?;
     crossterm::terminal::enable_raw_mode()?;
     let mut stdout: std::io::Stdout = std::io::stdout();
     execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
@@ -351,6 +353,8 @@ async fn run_tui_loop() -> Result<(), Box<dyn std::error::Error>> {
     
     let backend: CrosstermBackend<std::io::Stdout> = CrosstermBackend::new(stdout);
     let mut terminal: Terminal<CrosstermBackend<std::io::Stdout>> = Terminal::new(backend)?;
+
+    terminal.clear()?;
 
     let mut last_tick: std::time::Instant = std::time::Instant::now();
     let tick_rate: Duration = Duration::from_secs(5);
