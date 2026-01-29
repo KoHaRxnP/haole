@@ -1,6 +1,6 @@
 [package]
 name = "Haole"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 repository = "https://github.com/KoHaRxnP/haole"
 
@@ -14,7 +14,7 @@ colored = "2.0"
 crossterm = { version = "0.27", features = ["events"] }
 confy = "0.6"
 ratatui = "0.26"
-self_update = "0.41"
+self_update = { version = "0.41", features = ["archive-zip"] }
 chrono = "0.4"
 
 [[bin]]
