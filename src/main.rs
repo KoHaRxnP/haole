@@ -82,7 +82,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    #[command(about = "作者情報を表示します。")]
+    #[command(alias = "auth", about = "作者情報を表示します。")]
     Author,
     #[command(alias = "pl", about = "現在オンラインのプレイヤー名を表示します。")]
     Players,
