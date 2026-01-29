@@ -385,7 +385,7 @@ async fn run_tui_loop() -> Result<(), Box<dyn std::error::Error>> {
 
     loop {
         terminal.draw(|f: &mut ratatui::Frame<'_>| {
-            let size: ratatui::prelude::Rect = f.size();
+            let size: ratatui::prelude::Rect = f.area();
 
             let chunks: std::rc::Rc<[ratatui::prelude::Rect]> = Layout::default()
                 .direction(Direction::Vertical)
